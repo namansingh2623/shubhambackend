@@ -18,11 +18,11 @@ const Photo  = db.define('photos', {
     },
     like:{
         type: Sequelize.INTEGER,
-        allowNull:true
+        defaultValue: 0
     },
     share:{
         type: Sequelize.INTEGER,
-        allowNull:true
+        defaultValue: 0
     },
     imagedesc:{
         type: Sequelize.STRING,

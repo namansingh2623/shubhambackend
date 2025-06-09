@@ -102,28 +102,53 @@ router.delete('/delete/:photoId',checkAuth,(req,res,next)=>{
 
 });
 
-router.patch('/likes/:photoId',checkAuth,(req,res,next)=>{
-    Photo.update(
-        {like:req.params.like},
-        {where:{id:req.params.albumId}})
-        .then((result)=>{
-                (result===1)?res.status(200).json('Liked the Photo successfully'):
-                    res.status(404).json('Liked the Photo failed with given Id')
-            }
-        ).
-    catch(err =>next(err))
-})
-router.patch('/shares/:photoId',checkAuth,(req,res,next)=>{
-    Photo.update(
-        {share:req.params.like},
-        {where:{id:req.params.photoId}})
-        .then((result)=>{
-                (result===1)?res.status(200).json('Shared the Photo successfully'):
-                    res.status(404).json('Shared the Photo failed with given Id')
-            }
-        ).
-    catch(err =>next(err))
-})
+router.patch('/likes/:photoId', (req, res, next) => {
+    Photo.findByPk(req.params.photoId)
+        .then(photo => {
+            if (!photo) return res.status(404).json({ message: 'Photo not found' });
+            return photo.increment('like', { by: 1 }).then(() => {
+                return photo.reload();  // reload updated values from DB
+            }).then(updatedPhoto => {
+                res.json({ likes: updatedPhoto.like });
+            });
+        })
+        .catch(err => next(err));
+});
+router.patch('/shares/:photoId', (req, res, next) => {
+    Photo.findByPk(req.params.photoId)
+        .then(photo => {
+            if (!photo) return res.status(404).json({ message: 'Photo not found' });
+            return photo.increment('share', { by: 1 }).then(() => {
+                return photo.reload();
+            }).then(updatedPhoto => {
+                res.json({ shares: updatedPhoto.share });
+            });
+        })
+        .catch(err => next(err));
+});
+
+// router.patch('/likes/:photoId',checkAuth,(req,res,next)=>{
+//     Photo.update(
+//         {like:req.params.like},
+//         {where:{id:req.params.albumId}})
+//         .then((result)=>{
+//                 (result===1)?res.status(200).json('Liked the Photo successfully'):
+//                     res.status(404).json('Liked the Photo failed with given Id')
+//             }
+//         ).
+//     catch(err =>next(err))
+// })
+// router.patch('/shares/:photoId',checkAuth,(req,res,next)=>{
+//     Photo.update(
+//         {share:req.params.like},
+//         {where:{id:req.params.photoId}})
+//         .then((result)=>{
+//                 (result===1)?res.status(200).json('Shared the Photo successfully'):
+//                     res.status(404).json('Shared the Photo failed with given Id')
+//             }
+//         ).
+//     catch(err =>next(err))
+// })
 
 
 module.exports = router;
