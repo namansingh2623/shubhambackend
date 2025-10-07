@@ -14,14 +14,9 @@ const AnnouncementRouter=require('./routes/announcements');
 
 // const AnnouncementFileRouter=require('./routes/announcementFiles')
 
-
-
 const db = require('./config/database');
 require('./models/index');
 db.sync();
-
-
-
 app.use(morgan('dev'));
 app.use(bodyParser.urlencoded({extended: false}));
 app.use(bodyParser.json());
@@ -36,10 +31,10 @@ app.use('/Announcement',AnnouncementRouter);
 // app.use('/AnnouncementFiles',AnnouncementFileRouter);
 //routes for ec2 server
 
-app.use('/api/users', usersRouter);
-app.use('/api/albums', albumsRouter);
-app.use('/api/photos', photosRouter);
-app.use('/api/Announcement',AnnouncementRouter);
+// app.use('/api/users', usersRouter);
+// app.use('/api/albums', albumsRouter);
+// app.use('/api/photos', photosRouter);
+// app.use('/api/Announcement',AnnouncementRouter);
 
 
 //error

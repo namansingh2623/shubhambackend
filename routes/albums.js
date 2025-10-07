@@ -61,13 +61,30 @@ router.delete('/delete/:albumId', checkAuth, async (req, res, next) => {
     }
 });
 
-router.get('/all', (req,res,next)=>{
-    const pageSize= parseInt(req.query.pageSize) ;
-    const page = parseInt(req.query.page) ;
-    Album
-        .findAndCountAll({limit:pageSize || 10   ,offset:(page-1)*pageSize || 0})
-        .then((albums)=>res.json({page:page,pageSize:albums.rows.length,totalItems:albums.count,albums:albums.rows}))
-        .catch(err=>next(err))
+router.get('/all', async (req, res, next) => {
+    try {
+        // parse with safe defaults (1-based page index)
+        const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+        const pageSize = Math.max(parseInt(req.query.pageSize, 10) || 10, 1);
+
+        const limit = pageSize;
+        const offset = (page - 1) * pageSize;
+
+        const { count, rows } = await Album.findAndCountAll({
+            limit,
+            offset,
+            order: [['createdAt', 'DESC']], // optional but helpful for UX
+        });
+
+        res.json({
+            page,
+            pageSize,          // ✅ echo the requested pageSize, not rows.length
+            totalItems: count, // ✅ total available, ignoring pagination
+            albums: rows,
+        });
+    } catch (err) {
+        next(err);
+    }
 });
 
 router.get('/:id', (req,res,next)=>{
