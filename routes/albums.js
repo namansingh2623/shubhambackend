@@ -10,19 +10,55 @@ const checkAuth = require('../middleware/check-auth');
 router.post('/create', checkAuth,(req,res,next)=>{
     console.log("BODY:", req.body);
     console.log("FILE:", req.file);
+    console.log("Headers:", req.headers);
+    console.log("Content-Type:", req.get('Content-Type'));
+    
+    let { title, description, uploadedBy, category } = req.body;
+    
+    // Handle case where req.body is empty but rawBody contains data
+    if ((!title || !description || !uploadedBy || !category) && req.rawBody) {
+        try {
+            const parsedBody = JSON.parse(req.rawBody);
+            title = parsedBody.title;
+            description = parsedBody.description;
+            uploadedBy = parsedBody.uploadedBy;
+            category = parsedBody.category;
+            console.log('Parsed album data from rawBody:', { title, description, uploadedBy, category });
+        } catch (parseError) {
+            console.error('Error parsing rawBody for album:', parseError);
+        }
+    }
+    
+    console.log("Final extracted fields:", { title, description, uploadedBy, category });
+    
+    if (!title || !description || !uploadedBy || !category) {
+        console.log("Validation failed - missing fields");
+        return res.status(400).json({
+            message: 'Missing required fields. Please provide: title, description, uploadedBy, category'
+        });
+    }
+    
     new Album({
-        title:req.body.title,
-        description: req.body.description,
-        coverImage:'',
-        uploadedBy: req.body.uploadedBy,
-        category:req.body.category,
-
+        title: title,
+        description: description,
+        coverImage: '', // Will be set later when images are uploaded
+        uploadedBy: uploadedBy,
+        category: category,
     })
         .save()
         .then((album)=>{
-            if(!album)res.status(400).json({message:'Invalid input'});
-            res.status(201).json({message:'Album Successfully Created!',album:album.id})})
-        .catch(err=>{next(err)})
+            if(!album) {
+                return res.status(400).json({message:'Failed to create album'});
+            }
+            res.status(201).json({
+                message:'Album Successfully Created!',
+                album: album.id
+            });
+        })
+        .catch(err=>{
+            console.error('Album creation error:', err);
+            next(err);
+        });
 });
 
 router.delete('/delete/:albumId', checkAuth, async (req, res, next) => {
