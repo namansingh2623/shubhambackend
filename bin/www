@@ -10,12 +10,13 @@ const http = require('http');
 const fs = require('fs');
 
 
-const privateKey = fs.readFileSync('./crt/bbpsip.key','utf8');
-const privateCrt = fs.readFileSync('./crt/bbpsip.crt','utf8');
-const credential= {
-  key:privateKey,
-  crt:privateCrt,
-}
+// SSL certificates not available, using HTTP for development
+// const privateKey = fs.readFileSync('./crt/bbpsip.key','utf8');
+// const privateCrt = fs.readFileSync('./crt/bbpsip.crt','utf8');
+// const credential= {
+//   key:privateKey,
+//   crt:privateCrt,
+// }
 
 /**
  * Get port from environment and store in Express.
@@ -28,7 +29,7 @@ app.set('port', port);
  * Create HTTP server.
  */
 
-const server = http.createServer(credential,app);
+const server = http.createServer(app);
 
 
 /**

@@ -14,7 +14,7 @@ const Album  = db.define('albums', {
     },
     coverImage:{
         type:Sequelize.STRING,
-        allowNull:false
+        allowNull:true
     },
     uploadedBy: {
         type: Sequelize.STRING,

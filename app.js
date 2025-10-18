@@ -3,7 +3,22 @@ const app = express();
 const morgan = require('morgan');
 const bodyParser = require('body-parser');
 const cors = require('cors');
-app.use(cors());
+app.use(cors({
+    origin: 'http://localhost:3000',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 200
+}));
+
+// Handle preflight requests
+app.options('*', (req, res) => {
+    res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.sendStatus(200);
+});
 
 require('dotenv').config();
 
@@ -11,13 +26,51 @@ const albumsRouter = require('./routes/albums');
 const usersRouter = require('./routes/users');
 const photosRouter = require('./routes/photos');
 const AnnouncementRouter=require('./routes/announcements');
-
-// const AnnouncementFileRouter=require('./routes/announcementFiles')
+const articlesRouter = require('./routes/articles');
+const AnnouncementFileRouter=require('./routes/announcementFiles')
 
 const db = require('./config/database');
 require('./models/index');
 db.sync();
 app.use(morgan('dev'));
+
+// Raw body parser for articles endpoints (handles content-type issues)
+app.use((req, res, next) => {
+    if (req.method === 'POST' && (req.path === '/articles' || (req.path.startsWith('/articles/') && req.path.endsWith('/publish')))) {
+        let data = '';
+        req.setEncoding('utf8');
+        req.on('data', chunk => {
+            data += chunk;
+        });
+        req.on('end', () => {
+            req.rawBody = data;
+            next();
+        });
+    } else if (req.method === 'PUT' && req.path.startsWith('/articles/') && req.path.endsWith('/sections')) {
+        let data = '';
+        req.setEncoding('utf8');
+        req.on('data', chunk => {
+            data += chunk;
+        });
+        req.on('end', () => {
+            req.rawBody = data;
+            next();
+        });
+    } else if (req.method === 'POST' && req.path === '/albums/create') {
+        let data = '';
+        req.setEncoding('utf8');
+        req.on('data', chunk => {
+            data += chunk;
+        });
+        req.on('end', () => {
+            req.rawBody = data;
+            next();
+        });
+    } else {
+        next();
+    }
+});
+
 app.use(bodyParser.urlencoded({extended: false}));
 app.use(bodyParser.json());
 
@@ -27,7 +80,7 @@ app.use('/users', usersRouter);
 app.use('/albums', albumsRouter);
 app.use('/photos', photosRouter);
 app.use('/Announcement',AnnouncementRouter);
-
+app.use('/articles', articlesRouter);   // ← mount here
 // app.use('/AnnouncementFiles',AnnouncementFileRouter);
 //routes for ec2 server
 

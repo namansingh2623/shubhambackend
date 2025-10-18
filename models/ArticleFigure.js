@@ -1,7 +1,7 @@
 // models/ArticleFigure.js
 const Sequelize = require('sequelize');
 const db = require('../config/database');
-const ArticleSection = require('./ArticleSection');
+
 
 const ArticleFigure = db.define('article_figures', {
   sectionId: {
@@ -18,7 +18,5 @@ const ArticleFigure = db.define('article_figures', {
   indexes: [{ fields: ['sectionId', 'order'] }],
 });
 
-ArticleSection.hasMany(ArticleFigure, { foreignKey: 'sectionId', as: 'figures' });
-ArticleFigure.belongsTo(ArticleSection, { foreignKey: 'sectionId' });
 
 module.exports = ArticleFigure;
