@@ -3,8 +3,9 @@ const app = express();
 const morgan = require('morgan');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+// CORS configuration - Allow all origins for Docker deployment (nginx handles routing)
 app.use(cors({
-    origin: 'http://localhost:3000',
+    origin: process.env.ALLOWED_ORIGINS || '*',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -13,7 +14,8 @@ app.use(cors({
 
 // Handle preflight requests
 app.options('*', (req, res) => {
-    res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
+    const origin = req.headers.origin || '*';
+    res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.header('Access-Control-Allow-Credentials', 'true');
