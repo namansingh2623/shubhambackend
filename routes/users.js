@@ -7,11 +7,29 @@ const jwt = require("jsonwebtoken");
 const User = require('../models/User');
 
 router.post('/signup', (req, res, next) => {
+  // Basic validation before attempting to save
+  const { email, firstName, lastName, password } = req.body;
+  
+  if (!email || !firstName || !lastName || !password) {
+    const details = {};
+    if (!email) details.email = 'Email is required';
+    if (!firstName) details.firstName = 'First name is required';
+    if (!lastName) details.lastName = 'Last name is required';
+    if (!password) details.password = 'Password is required';
+    
+    return res.status(400).json({
+      error: {
+        message: 'Missing required fields',
+        details: details
+      }
+    });
+  }
+  
   new User({
-    email:req.body.email,
-    firstName:req.body.firstName,
-    lastName:req.body.lastName,
-    password:req.body.password
+    email: email.trim(),
+    firstName: firstName.trim(),
+    lastName: lastName.trim(),
+    password: password
   })
       .save()
       .then((user)=>res.json({message:'User Created Successfully!'}))

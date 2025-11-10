@@ -99,8 +99,39 @@ app.use((req,res,next)=>{
 
     next(err);
 });
-app.use((error, req, res,next) => {
-    res.status(error.status || 500).json({error: {message:error.message} || ''})
+app.use((error, req, res, next) => {
+    // Handle Sequelize validation errors
+    if (error.name === 'SequelizeValidationError' || error.name === 'SequelizeUniqueConstraintError') {
+        const validationErrors = {};
+        if (error.errors && Array.isArray(error.errors)) {
+            error.errors.forEach((err) => {
+                validationErrors[err.path] = err.message;
+            });
+        }
+        return res.status(400).json({
+            error: {
+                message: error.message || 'Validation error',
+                details: validationErrors
+            }
+        });
+    }
+    
+    // Handle other Sequelize errors
+    if (error.name && error.name.startsWith('Sequelize')) {
+        return res.status(400).json({
+            error: {
+                message: error.message || 'Database error',
+                type: error.name
+            }
+        });
+    }
+    
+    // Handle other errors
+    res.status(error.status || 500).json({
+        error: {
+            message: error.message || 'Internal server error'
+        }
+    });
 });
 
 
