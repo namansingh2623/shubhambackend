@@ -32,10 +32,11 @@ router.post('/upload-cover', auth, upload, (req, res, next) => {
         // Generate unique key for S3
         const fileExtension = req.file.originalname.split('.').pop();
         const params = {
-            Bucket: process.env.S3_BUCKET_NAME + '/Articles',
-            Key: `cover-${uuid.v4()}.${fileExtension}`,
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: `Articles/cover-${uuid.v4()}.${fileExtension}`,
             Body: req.file.buffer,
             ContentType: req.file.mimetype,
+            ACL: 'public-read', // Make images publicly accessible
         };
 
         s3.upload(params, (error, data) => {
@@ -66,10 +67,11 @@ router.post('/upload-figure', auth, uploadFigure, (req, res, next) => {
         // Generate unique key for S3
         const fileExtension = req.file.originalname.split('.').pop();
         const params = {
-            Bucket: process.env.S3_BUCKET_NAME + '/Articles',
-            Key: `figure-${uuid.v4()}.${fileExtension}`,
+            Bucket: process.env.S3_BUCKET_NAME,
+            Key: `Articles/figure-${uuid.v4()}.${fileExtension}`,
             Body: req.file.buffer,
             ContentType: req.file.mimetype,
+            ACL: 'public-read', // Make images publicly accessible
         };
 
         s3.upload(params, (error, data) => {
