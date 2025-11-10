@@ -36,7 +36,7 @@ router.post('/upload-cover', auth, upload, (req, res, next) => {
             Key: `Articles/cover-${uuid.v4()}.${fileExtension}`,
             Body: req.file.buffer,
             ContentType: req.file.mimetype,
-            ACL: 'public-read', // Make images publicly accessible
+            // ACL removed - bucket policy handles public access
         };
 
         s3.upload(params, (error, data) => {
@@ -71,7 +71,7 @@ router.post('/upload-figure', auth, uploadFigure, (req, res, next) => {
             Key: `Articles/figure-${uuid.v4()}.${fileExtension}`,
             Body: req.file.buffer,
             ContentType: req.file.mimetype,
-            ACL: 'public-read', // Make images publicly accessible
+            // ACL removed - bucket policy handles public access
         };
 
         s3.upload(params, (error, data) => {

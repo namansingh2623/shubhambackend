@@ -15,7 +15,7 @@ router.post('/presign', auth, async (req, res, next) => {
             Bucket: process.env.S3_BUCKET,
             Key: key,
             ContentType: contentType,
-            ACL: 'public-read',
+            // ACL removed - bucket policy handles public access
         });
         const url = await getSignedUrl(s3, cmd, { expiresIn: 60 });
         const publicUrl = `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;

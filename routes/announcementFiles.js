@@ -33,7 +33,7 @@ router.post('/upload',checkAuth,upload,(req,res,next)=>{
                         Bucket:'bbpsipbucket/AnnouncementFiles',
                         Key:announcementId+'___'+myFile+`${uuid.v4()}`,
                         Body: req.file.buffer,
-                        ACL:'public-read'
+                        // ACL removed - bucket policy handles public access
                     };
                     s3.upload(params,(error,data)=>{
                         if(error){
