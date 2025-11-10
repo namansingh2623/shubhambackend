@@ -380,16 +380,26 @@ router.delete('/:id', auth, async (req, res, next) => {
                 }
                 
                 if (key) {
-                    await s3.deleteObject({
-                        Bucket: process.env.S3_BUCKET_NAME,
-                        Key: key
-                    }).promise();
-                    console.log(`Deleted cover image: ${key}`);
+                    try {
+                        await s3.deleteObject({
+                            Bucket: process.env.S3_BUCKET_NAME,
+                            Key: key
+                        }).promise();
+                        console.log(`✅ Successfully deleted cover image: ${key}`);
+                    } catch (deleteErr) {
+                        console.error(`❌ Failed to delete cover image ${key}:`, deleteErr.message);
+                        console.error('Error details:', JSON.stringify(deleteErr, null, 2));
+                        // Check if it's a permissions error
+                        if (deleteErr.code === 'AccessDenied' || deleteErr.statusCode === 403) {
+                            console.error('⚠️  IAM permission issue: Your IAM user needs s3:DeleteObject permission');
+                        }
+                        // Continue with deletion even if S3 delete fails
+                    }
                 } else {
-                    console.warn(`Could not extract S3 key from cover image URL: ${coverImageUrl}`);
+                    console.warn(`⚠️  Could not extract S3 key from cover image URL: ${coverImageUrl}`);
                 }
             } catch (s3Err) {
-                console.error('Error deleting cover image from S3:', s3Err);
+                console.error('Error processing cover image deletion:', s3Err);
                 // Continue with deletion even if S3 delete fails
             }
         }
@@ -422,16 +432,26 @@ router.delete('/:id', auth, async (req, res, next) => {
                                 }
                                 
                                 if (key) {
-                                    await s3.deleteObject({
-                                        Bucket: process.env.S3_BUCKET_NAME,
-                                        Key: key
-                                    }).promise();
-                                    console.log(`Deleted figure image: ${key}`);
+                                    try {
+                                        await s3.deleteObject({
+                                            Bucket: process.env.S3_BUCKET_NAME,
+                                            Key: key
+                                        }).promise();
+                                        console.log(`✅ Successfully deleted figure image: ${key}`);
+                                    } catch (deleteErr) {
+                                        console.error(`❌ Failed to delete figure image ${key}:`, deleteErr.message);
+                                        console.error('Error details:', JSON.stringify(deleteErr, null, 2));
+                                        // Check if it's a permissions error
+                                        if (deleteErr.code === 'AccessDenied' || deleteErr.statusCode === 403) {
+                                            console.error('⚠️  IAM permission issue: Your IAM user needs s3:DeleteObject permission');
+                                        }
+                                        // Continue with deletion
+                                    }
                                 } else {
-                                    console.warn(`Could not extract S3 key from figure URL: ${figureUrl}`);
+                                    console.warn(`⚠️  Could not extract S3 key from figure URL: ${figureUrl}`);
                                 }
                             } catch (s3Err) {
-                                console.error('Error deleting figure image from S3:', s3Err);
+                                console.error('Error processing figure image deletion:', s3Err);
                                 // Continue with deletion
                             }
                         }

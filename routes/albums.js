@@ -71,11 +71,21 @@ router.delete('/delete/:albumId', checkAuth, async (req, res, next) => {
                 Bucket: process.env.S3_BUCKET_NAME,
                 Key: photo.storageId
             };
-            console.log(`Attempting to delete S3 object: Bucket=${params.Bucket}, "Checking Key ",Key=${params.Key}`);
-            console.log("Photo key", photo.storageId, "-->");
+            console.log(`Attempting to delete S3 object: Bucket=${params.Bucket}, Key=${params.Key}`);
 
-            // Wait for deletion from S3
-            await s3.deleteObject(params).promise();
+            try {
+                // Wait for deletion from S3
+                await s3.deleteObject(params).promise();
+                console.log(`✅ Successfully deleted photo from S3: ${params.Key}`);
+            } catch (deleteErr) {
+                console.error(`❌ Failed to delete photo ${params.Key} from S3:`, deleteErr.message);
+                console.error('Error details:', JSON.stringify(deleteErr, null, 2));
+                // Check if it's a permissions error
+                if (deleteErr.code === 'AccessDenied' || deleteErr.statusCode === 403) {
+                    console.error('⚠️  IAM permission issue: Your IAM user needs s3:DeleteObject permission');
+                }
+                // Continue with DB deletion even if S3 delete fails
+            }
 
             // Delete from DB
             await photo.destroy();
