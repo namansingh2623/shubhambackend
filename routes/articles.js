@@ -340,6 +340,116 @@ router.get('/admin/:id', auth, async (req, res, next) => {
     }
 });
 
+// Delete article (admin only)
+router.delete('/:id', auth, async (req, res, next) => {
+    try {
+        const articleId = req.params.id;
+        const article = await Article.findByPk(articleId, {
+            include: [
+                { model: ArticleSection, as: 'sections', include: [{ model: ArticleFigure, as: 'figures' }] },
+            ],
+        });
+
+        if (!article) {
+            return res.status(404).json({ message: 'Article not found' });
+        }
+
+        // Delete cover image from S3 if it exists
+        if (article.coverImage) {
+            try {
+                // Extract key from S3 URL
+                // URLs can be: https://bucket.s3.region.amazonaws.com/Articles/cover-xxx.jpg
+                // or: https://s3.region.amazonaws.com/bucket/Articles/cover-xxx.jpg
+                const coverImageUrl = article.coverImage;
+                let key = null;
+                
+                // Try to extract the key from different URL formats
+                const urlMatch1 = coverImageUrl.match(/\/Articles\/(cover-[^/?]+)/);
+                const urlMatch2 = coverImageUrl.match(/s3[^/]*\/[^/]+\/Articles\/(cover-[^/?]+)/);
+                
+                if (urlMatch1) {
+                    key = `Articles/${urlMatch1[1]}`;
+                } else if (urlMatch2) {
+                    key = `Articles/${urlMatch2[1]}`;
+                } else if (coverImageUrl.includes('Articles/')) {
+                    // Fallback: extract everything after Articles/
+                    const parts = coverImageUrl.split('Articles/');
+                    if (parts.length > 1) {
+                        key = `Articles/${parts[1].split('?')[0]}`; // Remove query params
+                    }
+                }
+                
+                if (key) {
+                    await s3.deleteObject({
+                        Bucket: process.env.S3_BUCKET_NAME,
+                        Key: key
+                    }).promise();
+                    console.log(`Deleted cover image: ${key}`);
+                } else {
+                    console.warn(`Could not extract S3 key from cover image URL: ${coverImageUrl}`);
+                }
+            } catch (s3Err) {
+                console.error('Error deleting cover image from S3:', s3Err);
+                // Continue with deletion even if S3 delete fails
+            }
+        }
+
+        // Delete all figure images from S3
+        if (article.sections) {
+            for (const section of article.sections) {
+                if (section.figures) {
+                    for (const figure of section.figures) {
+                        if (figure.imageUrl) {
+                            try {
+                                // Extract key from S3 URL
+                                const figureUrl = figure.imageUrl;
+                                let key = null;
+                                
+                                // Try to extract the key from different URL formats
+                                const urlMatch1 = figureUrl.match(/\/Articles\/(figure-[^/?]+)/);
+                                const urlMatch2 = figureUrl.match(/s3[^/]*\/[^/]+\/Articles\/(figure-[^/?]+)/);
+                                
+                                if (urlMatch1) {
+                                    key = `Articles/${urlMatch1[1]}`;
+                                } else if (urlMatch2) {
+                                    key = `Articles/${urlMatch2[1]}`;
+                                } else if (figureUrl.includes('Articles/')) {
+                                    // Fallback: extract everything after Articles/
+                                    const parts = figureUrl.split('Articles/');
+                                    if (parts.length > 1) {
+                                        key = `Articles/${parts[1].split('?')[0]}`; // Remove query params
+                                    }
+                                }
+                                
+                                if (key) {
+                                    await s3.deleteObject({
+                                        Bucket: process.env.S3_BUCKET_NAME,
+                                        Key: key
+                                    }).promise();
+                                    console.log(`Deleted figure image: ${key}`);
+                                } else {
+                                    console.warn(`Could not extract S3 key from figure URL: ${figureUrl}`);
+                                }
+                            } catch (s3Err) {
+                                console.error('Error deleting figure image from S3:', s3Err);
+                                // Continue with deletion
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Delete the article (cascade will delete sections and figures)
+        await article.destroy();
+
+        res.json({ message: 'Article deleted successfully' });
+    } catch (err) {
+        console.error('Error deleting article:', err);
+        next(err);
+    }
+});
+
 // Public fetch by slug (must be last to avoid conflicts with other routes)
 router.get('/:slug', async (req, res, next) => {
     try {
