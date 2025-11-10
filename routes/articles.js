@@ -20,6 +20,75 @@ const storage = multer.memoryStorage({
 });
 
 const upload = multer({ storage, limits: { fileSize: 10485760 } }).single('coverImage'); // 10MB limit
+const uploadFigure = multer({ storage, limits: { fileSize: 10485760 } }).single('figureImage'); // 10MB limit
+
+// Upload cover image (must be before /:slug route)
+router.post('/upload-cover', auth, upload, (req, res, next) => {
+    if (!req.file) {
+        return res.status(400).json({ message: 'Please include a file first!' });
+    }
+
+    try {
+        // Generate unique key for S3
+        const fileExtension = req.file.originalname.split('.').pop();
+        const params = {
+            Bucket: process.env.S3_BUCKET_NAME + '/Articles',
+            Key: `cover-${uuid.v4()}.${fileExtension}`,
+            Body: req.file.buffer,
+            ContentType: req.file.mimetype,
+        };
+
+        s3.upload(params, (error, data) => {
+            if (error) {
+                console.error('S3 upload error:', error);
+                return res.status(error.statusCode || 500).json({ message: error.message });
+            }
+
+            console.log('Cover image uploaded successfully:', data.Location);
+            res.json({
+                message: 'Cover image uploaded successfully!',
+                coverImageUrl: data.Location,
+            });
+        });
+    } catch (err) {
+        console.error('Error uploading cover image:', err);
+        next(err);
+    }
+});
+
+// Upload figure image (must be before /:slug route)
+router.post('/upload-figure', auth, uploadFigure, (req, res, next) => {
+    if (!req.file) {
+        return res.status(400).json({ message: 'Please include a file first!' });
+    }
+
+    try {
+        // Generate unique key for S3
+        const fileExtension = req.file.originalname.split('.').pop();
+        const params = {
+            Bucket: process.env.S3_BUCKET_NAME + '/Articles',
+            Key: `figure-${uuid.v4()}.${fileExtension}`,
+            Body: req.file.buffer,
+            ContentType: req.file.mimetype,
+        };
+
+        s3.upload(params, (error, data) => {
+            if (error) {
+                console.error('S3 upload error:', error);
+                return res.status(error.statusCode || 500).json({ message: error.message });
+            }
+
+            console.log('Figure image uploaded successfully:', data.Location);
+            res.json({
+                message: 'Figure image uploaded successfully!',
+                imageUrl: data.Location,
+            });
+        });
+    } catch (err) {
+        console.error('Error uploading figure image:', err);
+        next(err);
+    }
+});
 
 // Create new article (draft)
 router.post('/', auth, async (req, res, next) => {
@@ -269,41 +338,7 @@ router.get('/admin/:id', auth, async (req, res, next) => {
     }
 });
 
-// Upload cover image
-router.post('/upload-cover', auth, upload, (req, res, next) => {
-    if (!req.file) {
-        return res.status(400).json({ message: 'Please include a file first!' });
-    }
-
-    try {
-        // Generate unique key for S3
-        const fileExtension = req.file.originalname.split('.').pop();
-        const params = {
-            Bucket: process.env.S3_BUCKET_NAME + '/Articles',
-            Key: `cover-${uuid.v4()}.${fileExtension}`,
-            Body: req.file.buffer,
-            ContentType: req.file.mimetype,
-        };
-
-        s3.upload(params, (error, data) => {
-            if (error) {
-                console.error('S3 upload error:', error);
-                return res.status(error.statusCode || 500).json({ message: error.message });
-            }
-
-            console.log('Cover image uploaded successfully:', data.Location);
-            res.json({
-                message: 'Cover image uploaded successfully!',
-                coverImageUrl: data.Location,
-            });
-        });
-    } catch (err) {
-        console.error('Error uploading cover image:', err);
-        next(err);
-    }
-});
-
-// Public fetch by slug
+// Public fetch by slug (must be last to avoid conflicts with other routes)
 router.get('/:slug', async (req, res, next) => {
     try {
         const article = await Article.findOne({
