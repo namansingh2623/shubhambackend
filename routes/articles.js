@@ -1,13 +1,25 @@
 // routes/articles.js
 const express = require('express');
 const slugify = require('slugify');
+const multer = require('multer');
+const uuid = require('uuid');
 const Article = require('../models/Article');
 const ArticleSection = require('../models/ArticleSection');
 const ArticleFigure = require('../models/ArticleFigure');
 const auth = require('../middleware/check-auth');
 const { mdToSafeHtml, estimateReadingTime } = require('../utils/markdown');
+const s3 = require('../config/s3');
 
 const router = express.Router();
+
+// Multer configuration for cover image upload
+const storage = multer.memoryStorage({
+    destination: function(req, file, callback) {
+        callback(null, '');
+    },
+});
+
+const upload = multer({ storage, limits: { fileSize: 10485760 } }).single('coverImage'); // 10MB limit
 
 // Create new article (draft)
 router.post('/', auth, async (req, res, next) => {
@@ -254,6 +266,40 @@ router.get('/admin/:id', auth, async (req, res, next) => {
         res.json({ article });
     } catch (e) {
         next(e);
+    }
+});
+
+// Upload cover image
+router.post('/upload-cover', auth, upload, (req, res, next) => {
+    if (!req.file) {
+        return res.status(400).json({ message: 'Please include a file first!' });
+    }
+
+    try {
+        // Generate unique key for S3
+        const fileExtension = req.file.originalname.split('.').pop();
+        const params = {
+            Bucket: process.env.S3_BUCKET_NAME + '/Articles',
+            Key: `cover-${uuid.v4()}.${fileExtension}`,
+            Body: req.file.buffer,
+            ContentType: req.file.mimetype,
+        };
+
+        s3.upload(params, (error, data) => {
+            if (error) {
+                console.error('S3 upload error:', error);
+                return res.status(error.statusCode || 500).json({ message: error.message });
+            }
+
+            console.log('Cover image uploaded successfully:', data.Location);
+            res.json({
+                message: 'Cover image uploaded successfully!',
+                coverImageUrl: data.Location,
+            });
+        });
+    } catch (err) {
+        console.error('Error uploading cover image:', err);
+        next(err);
     }
 });
 
