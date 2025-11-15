@@ -9,6 +9,7 @@ const ArticleFigure = require('../models/ArticleFigure');
 const auth = require('../middleware/check-auth');
 const { mdToSafeHtml, estimateReadingTime } = require('../utils/markdown');
 const s3 = require('../config/s3');
+const { convertToWebP, isWebP } = require('../utils/imageConverter');
 
 const router = express.Router();
 
@@ -23,19 +24,36 @@ const upload = multer({ storage, limits: { fileSize: 10485760 } }).single('cover
 const uploadFigure = multer({ storage, limits: { fileSize: 10485760 } }).single('figureImage'); // 10MB limit
 
 // Upload cover image (must be before /:slug route)
-router.post('/upload-cover', auth, upload, (req, res, next) => {
+router.post('/upload-cover', auth, upload, async (req, res, next) => {
     if (!req.file) {
         return res.status(400).json({ message: 'Please include a file first!' });
     }
 
     try {
-        // Generate unique key for S3
-        const fileExtension = req.file.originalname.split('.').pop();
+        // Convert image to WebP format
+        let imageBuffer = req.file.buffer;
+        let contentType = 'image/webp';
+        
+        // Check if already WebP, if not convert
+        const alreadyWebP = await isWebP(imageBuffer);
+        if (!alreadyWebP) {
+            console.log('Converting cover image to WebP...');
+            imageBuffer = await convertToWebP(imageBuffer, { 
+                quality: 85,
+                maxWidth: 1920, // Max width for cover images
+                maxHeight: 1080 // Max height for cover images
+            });
+            console.log('Cover image converted to WebP successfully');
+        } else {
+            console.log('Cover image is already in WebP format');
+        }
+
+        // Generate unique key for S3 (always use .webp extension)
         const params = {
             Bucket: process.env.S3_BUCKET_NAME,
-            Key: `Articles/cover-${uuid.v4()}.${fileExtension}`,
-            Body: req.file.buffer,
-            ContentType: req.file.mimetype,
+            Key: `Articles/cover-${uuid.v4()}.webp`,
+            Body: imageBuffer,
+            ContentType: contentType,
             // ACL removed - bucket policy handles public access
         };
 
@@ -45,7 +63,7 @@ router.post('/upload-cover', auth, upload, (req, res, next) => {
                 return res.status(error.statusCode || 500).json({ message: error.message });
             }
 
-            console.log('Cover image uploaded successfully:', data.Location);
+            console.log('Cover image uploaded successfully as WebP:', data.Location);
             res.json({
                 message: 'Cover image uploaded successfully!',
                 coverImageUrl: data.Location,
@@ -58,19 +76,36 @@ router.post('/upload-cover', auth, upload, (req, res, next) => {
 });
 
 // Upload figure image (must be before /:slug route)
-router.post('/upload-figure', auth, uploadFigure, (req, res, next) => {
+router.post('/upload-figure', auth, uploadFigure, async (req, res, next) => {
     if (!req.file) {
         return res.status(400).json({ message: 'Please include a file first!' });
     }
 
     try {
-        // Generate unique key for S3
-        const fileExtension = req.file.originalname.split('.').pop();
+        // Convert image to WebP format
+        let imageBuffer = req.file.buffer;
+        let contentType = 'image/webp';
+        
+        // Check if already WebP, if not convert
+        const alreadyWebP = await isWebP(imageBuffer);
+        if (!alreadyWebP) {
+            console.log('Converting figure image to WebP...');
+            imageBuffer = await convertToWebP(imageBuffer, { 
+                quality: 85,
+                maxWidth: 1600, // Max width for figure images
+                maxHeight: 1200 // Max height for figure images
+            });
+            console.log('Figure image converted to WebP successfully');
+        } else {
+            console.log('Figure image is already in WebP format');
+        }
+
+        // Generate unique key for S3 (always use .webp extension)
         const params = {
             Bucket: process.env.S3_BUCKET_NAME,
-            Key: `Articles/figure-${uuid.v4()}.${fileExtension}`,
-            Body: req.file.buffer,
-            ContentType: req.file.mimetype,
+            Key: `Articles/figure-${uuid.v4()}.webp`,
+            Body: imageBuffer,
+            ContentType: contentType,
             // ACL removed - bucket policy handles public access
         };
 
@@ -80,7 +115,7 @@ router.post('/upload-figure', auth, uploadFigure, (req, res, next) => {
                 return res.status(error.statusCode || 500).json({ message: error.message });
             }
 
-            console.log('Figure image uploaded successfully:', data.Location);
+            console.log('Figure image uploaded successfully as WebP:', data.Location);
             res.json({
                 message: 'Figure image uploaded successfully!',
                 imageUrl: data.Location,

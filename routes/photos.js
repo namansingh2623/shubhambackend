@@ -7,6 +7,7 @@ const Photo = require('../models/Photo')
 const Album  = require('../models/Album');
 const s3 = require(   '../config/s3');
 const checkAuth = require('../middleware/check-auth');
+const { convertToWebP, isWebP } = require('../utils/imageConverter');
 
 
 const storage =multer.memoryStorage({
@@ -17,59 +18,82 @@ const storage =multer.memoryStorage({
 
 const upload= multer({storage,limits:{fileSize:54288000}}).single('image')
 
-router.post('/upload',checkAuth,upload,(req,res,next)=>{
+router.post('/upload',checkAuth,upload,async (req,res,next)=>{
     let albumId = req.query.albumId;
     if(!req.file)res.status(401).json({message:'Please include a file first!'})
     else{
         Album
             .findByPk(albumId)
-            .then(album=>{
+            .then(async album=>{
                 console.log("Album id found!!",albumId)
                 if(!album){res.status(404).json({message:'Album doesnt exist'})}
                 else{
-                    let myFile=req.file.originalname.split(".")
-                    const fileType=myFile[myFile.length-1];
-                    const params={
-                        Bucket:process.env.S3_BUCKET_NAME+'/Gallery',
-                        Key: `${uuid.v4()}`,
-                        Body: req.file.buffer,
-                        // ACL:'public-read'
-                    };
-
-                    s3.upload(params,(error,data)=>{
-                        if(error){res.status(error.statusCode).json({message:error.message})}
-                        else{
-                            console.log("Photo uploaded successfully!!")
-                            const imageDescription = req.body.imagedesc || '';
-                            new Photo({
-                                imageUrl: data.Location,
-                                storageId: data.Key,
-                                albumId: album.id,
-                                imagedesc: imageDescription
-                            }).save()
-                                .then((photo)=>{
-                                    console.log("Arjun logs, photo added in db ")
-
-
-                                    if(album.coverImage===''){
-                                        album.update({coverImage:photo.imageUrl})
-                                            .then(()=> {
-                                            res.json({message:'Photo Uploaded Successfully!',photoId:photo.id})
-                                        }).catch(err=>{
-                                            console.log(err);
-                                            next(err);
-                                        });
-                                    }
-                                    else  res.json({message:'Photo Uploaded Successfully!',photoId:photo.id})
-
-
-                                })
-                                .catch(err=>{
-                                    console.log({err})
-                                    next(err.message)
-                                })
+                    try {
+                        // Convert image to WebP format
+                        let imageBuffer = req.file.buffer;
+                        let contentType = 'image/webp';
+                        
+                        // Check if already WebP, if not convert
+                        const alreadyWebP = await isWebP(imageBuffer);
+                        if (!alreadyWebP) {
+                            console.log('Converting photo to WebP...');
+                            imageBuffer = await convertToWebP(imageBuffer, { 
+                                quality: 85,
+                                maxWidth: 1920, // Max width for photos
+                                maxHeight: 1920 // Max height for photos
+                            });
+                            console.log('Photo converted to WebP successfully');
+                        } else {
+                            console.log('Photo is already in WebP format');
                         }
-                    })
+
+                        // Generate unique key for S3 (always use .webp extension)
+                        const params={
+                            Bucket:process.env.S3_BUCKET_NAME+'/Gallery',
+                            Key: `${uuid.v4()}.webp`,
+                            Body: imageBuffer,
+                            ContentType: contentType,
+                            // ACL removed - bucket policy handles public access
+                        };
+
+                        s3.upload(params,(error,data)=>{
+                            if(error){res.status(error.statusCode).json({message:error.message})}
+                            else{
+                                console.log("Photo uploaded successfully as WebP!!")
+                                const imageDescription = req.body.imagedesc || '';
+                                new Photo({
+                                    imageUrl: data.Location,
+                                    storageId: data.Key,
+                                    albumId: album.id,
+                                    imagedesc: imageDescription
+                                }).save()
+                                    .then((photo)=>{
+                                        console.log("Arjun logs, photo added in db ")
+
+
+                                        if(album.coverImage===''){
+                                            album.update({coverImage:photo.imageUrl})
+                                                .then(()=> {
+                                                res.json({message:'Photo Uploaded Successfully!',photoId:photo.id})
+                                            }).catch(err=>{
+                                                console.log(err);
+                                                next(err);
+                                            });
+                                        }
+                                        else  res.json({message:'Photo Uploaded Successfully!',photoId:photo.id})
+
+
+                                    })
+                                    .catch(err=>{
+                                        console.log({err})
+                                        next(err.message)
+                                    })
+                            }
+                        })
+                    } catch (conversionError) {
+                        console.error('Error converting photo to WebP:', conversionError);
+                        next(conversionError);
+                    }
                 }
 
             })

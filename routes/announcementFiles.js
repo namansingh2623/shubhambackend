@@ -7,6 +7,7 @@ const AnnouncementFile = require('../models/AnnouncementsFiles')
 const Announcements= require('../models/Announcements');
 const s3 = require(   '../config/s3');
 const checkAuth = require('../middleware/check-auth');
+const { convertToWebP, isWebP } = require('../utils/imageConverter');
 
 
 const storage =multer.memoryStorage({
@@ -15,50 +16,74 @@ const storage =multer.memoryStorage({
     },
 })
 const upload= multer({storage,limits:{fileSize:5242880}}).single('image')
-router.post('/upload',checkAuth,upload,(req,res,next)=>{
+router.post('/upload',checkAuth,upload,async (req,res,next)=>{
     let announcementId=req.query.announcementId;
     console.log("my id "+announcementId)
     if(!req.file)res.status(401).json({message:'Please include a file first!'})
     else{
         Announcements
             .findByPk(announcementId)
-            .then(announcement=>{
+            .then(async announcement=>{
                 if(!announcement){
                     console.log("in if")
                     res.status(404).json({message:'Announcement Doesnt exist' })}
                 else {
-                    console.log("in else")
-                    let myFile=req.file.originalname.split(".")
-                    const params={
-                        Bucket:'bbpsipbucket/AnnouncementFiles',
-                        Key:announcementId+'___'+myFile+`${uuid.v4()}`,
-                        Body: req.file.buffer,
-                        // ACL removed - bucket policy handles public access
-                    };
-                    s3.upload(params,(error,data)=>{
-                        if(error){
-                            console.log("in s3 if")
-                            res.status(error.statusCode).json({message:"error from s3"+error.message})}
-                        else {
-                            console.log("in s3 else")
-                            new AnnouncementFile({fileUrl: data.Location,storageId:data.Key,announcementId:announcement.id})
-                                .save()
-                                .then((myfile)=>{
-                                    console.log("in then clause ")
-                                    if(announcement.coverFile===''){
-                                     announcement.update({coverFile: myfile.fileUrl})
-                                            .then(()=>{
-                                                res.json({message:'AnnouncementFiles Uploaded Successfully!'})
-                                            }).catch(err=>next(err));
-                                    }
-                                    else {
-                                        console.log("in s3 fail ")
-                                        res.json({message:'AnnouncementFiles Was not Uploaded!'})
-                                    }
-                                })
-                                .catch(err=>next("outside error"+err.message))
+                    try {
+                        console.log("in else")
+                        // Convert image to WebP format
+                        let imageBuffer = req.file.buffer;
+                        let contentType = 'image/webp';
+                        
+                        // Check if already WebP, if not convert
+                        const alreadyWebP = await isWebP(imageBuffer);
+                        if (!alreadyWebP) {
+                            console.log('Converting announcement file to WebP...');
+                            imageBuffer = await convertToWebP(imageBuffer, { 
+                                quality: 85,
+                                maxWidth: 1920, // Max width for announcement files
+                                maxHeight: 1920 // Max height for announcement files
+                            });
+                            console.log('Announcement file converted to WebP successfully');
+                        } else {
+                            console.log('Announcement file is already in WebP format');
                         }
-                    })
+
+                        // Generate unique key for S3 (always use .webp extension)
+                        const params={
+                            Bucket:'bbpsipbucket/AnnouncementFiles',
+                            Key:announcementId+'___'+`${uuid.v4()}.webp`,
+                            Body: imageBuffer,
+                            ContentType: contentType,
+                            // ACL removed - bucket policy handles public access
+                        };
+                        s3.upload(params,(error,data)=>{
+                            if(error){
+                                console.log("in s3 if")
+                                res.status(error.statusCode).json({message:"error from s3"+error.message})}
+                            else {
+                                console.log("in s3 else")
+                                new AnnouncementFile({fileUrl: data.Location,storageId:data.Key,announcementId:announcement.id})
+                                    .save()
+                                    .then((myfile)=>{
+                                        console.log("in then clause ")
+                                        if(announcement.coverFile===''){
+                                         announcement.update({coverFile: myfile.fileUrl})
+                                                .then(()=>{
+                                                    res.json({message:'AnnouncementFiles Uploaded Successfully!'})
+                                                }).catch(err=>next(err));
+                                        }
+                                        else {
+                                            console.log("in s3 fail ")
+                                            res.json({message:'AnnouncementFiles Was not Uploaded!'})
+                                        }
+                                    })
+                                    .catch(err=>next("outside error"+err.message))
+                            }
+                        })
+                    } catch (conversionError) {
+                        console.error('Error converting announcement file to WebP:', conversionError);
+                        next(conversionError);
+                    }
                 }
             })
             .catch(err=>next(err))
