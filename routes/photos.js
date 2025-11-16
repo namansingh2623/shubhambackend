@@ -16,7 +16,7 @@ const storage =multer.memoryStorage({
     },
 })
 
-const upload= multer({storage,limits:{fileSize:54288000}}).single('image')
+const upload= multer({storage,limits:{fileSize:2097152}}).single('image') // 2MB limit
 
 router.post('/upload',checkAuth,upload,async (req,res,next)=>{
     let albumId = req.query.albumId;

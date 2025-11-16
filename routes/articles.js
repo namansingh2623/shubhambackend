@@ -20,8 +20,8 @@ const storage = multer.memoryStorage({
     },
 });
 
-const upload = multer({ storage, limits: { fileSize: 10485760 } }).single('coverImage'); // 10MB limit
-const uploadFigure = multer({ storage, limits: { fileSize: 10485760 } }).single('figureImage'); // 10MB limit
+const upload = multer({ storage, limits: { fileSize: 2097152 } }).single('coverImage'); // 2MB limit
+const uploadFigure = multer({ storage, limits: { fileSize: 2097152 } }).single('figureImage'); // 2MB limit
 
 // Upload cover image (must be before /:slug route)
 router.post('/upload-cover', auth, upload, async (req, res, next) => {
