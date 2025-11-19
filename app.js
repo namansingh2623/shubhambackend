@@ -33,7 +33,18 @@ const AnnouncementFileRouter=require('./routes/announcementFiles')
 
 const db = require('./config/database');
 require('./models/index');
-db.sync();
+// Only sync in development - NEVER use force: true or alter: true in production!
+// In production, use migrations instead of sync()
+if (process.env.NODE_ENV !== 'production') {
+    db.sync({ alter: false }).catch(err => {
+        console.error('Database sync error:', err);
+    });
+} else {
+    // In production, just authenticate - don't sync
+    db.authenticate().catch(err => {
+        console.error('Database connection error:', err);
+    });
+}
 app.use(morgan('dev'));
 
 // Raw body parser for articles endpoints (handles content-type issues)
