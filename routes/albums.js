@@ -150,16 +150,17 @@ router.patch('/setCoverImage/:albumId',checkAuth,(req,res,next)=>{
         })
         .catch(err =>next(err))
 })
-router.patch('/likes/:albumId',checkAuth,(req,res,next)=>{
-    Album.update(
-        {like:req.params.like},
-        {where:{id:req.params.albumId}})
-        .then((result)=>{
-            (result===1)?res.status(200).json('Liked the Album successfully'):
-                res.status(404).json('Liked the Album failed with given Id')
-        }
-    ).
-        catch(err =>next(err))
+router.patch('/likes/:albumId', checkAuth, (req, res, next) => {
+    Album.findByPk(req.params.albumId)
+        .then(album => {
+            if (!album) return res.status(404).json({ message: 'Album not found' });
+            return album.increment('like', { by: 1 }).then(() => {
+                return album.reload();  // reload updated values from DB
+            }).then(updatedAlbum => {
+                res.json({ likes: updatedAlbum.like });
+            });
+        })
+        .catch(err => next(err));
 })
 
 router.patch('/shares/:albumId',checkAuth,(req,res,next)=>{
