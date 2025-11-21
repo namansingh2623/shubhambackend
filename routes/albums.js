@@ -175,10 +175,15 @@ router.patch('/likes/:albumId', (req, res, next) => {
     Album.findByPk(req.params.albumId)
         .then(album => {
             if (!album) return res.status(404).json({ message: 'Album not found' });
-            return album.increment('like', { by: 1 }).then(() => {
+            // Handle null values - default to 0 if like is null
+            const currentLike = album.like === null || album.like === undefined ? 0 : album.like;
+            // Update with the new value (current + 1)
+            return album.update({ like: currentLike + 1 }).then(() => {
                 return album.reload();  // reload updated values from DB
             }).then(updatedAlbum => {
-                res.json({ likes: updatedAlbum.like });
+                // Ensure we always return a number, not null
+                const likes = updatedAlbum.like === null || updatedAlbum.like === undefined ? 0 : updatedAlbum.like;
+                res.json({ likes: likes });
             });
         })
         .catch(err => next(err));
