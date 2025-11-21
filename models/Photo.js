@@ -27,6 +27,25 @@ const Photo  = db.define('photos', {
     imagedesc:{
         type: Sequelize.STRING,
         allowNull:true
+    },
+    // E-commerce fields (all optional for backward compatibility)
+    premiumImageUrl: {
+        type: Sequelize.STRING,
+        allowNull: true
+    },
+    premiumStorageId: {
+        type: Sequelize.STRING,
+        allowNull: true
+    },
+    price: {
+        type: Sequelize.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0.00
+    },
+    isPremium: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
     }
 
 });

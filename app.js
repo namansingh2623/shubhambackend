@@ -29,7 +29,11 @@ const usersRouter = require('./routes/users');
 const photosRouter = require('./routes/photos');
 const AnnouncementRouter=require('./routes/announcements');
 const articlesRouter = require('./routes/articles');
-const AnnouncementFileRouter=require('./routes/announcementFiles')
+const AnnouncementFileRouter=require('./routes/announcementFiles');
+// E-commerce routes
+const cartRouter = require('./routes/cart');
+const ordersRouter = require('./routes/orders');
+const downloadsRouter = require('./routes/downloads');
 
 const db = require('./config/database');
 require('./models/index');
@@ -95,6 +99,10 @@ app.use('/photos', photosRouter);
 app.use('/Announcement',AnnouncementRouter);
 app.use('/articles', articlesRouter);   // ← mount here
 // app.use('/AnnouncementFiles',AnnouncementFileRouter);
+// E-commerce routes
+app.use('/cart', cartRouter);
+app.use('/orders', ordersRouter);
+app.use('/downloads', downloadsRouter);
 //routes for ec2 server
 
 // app.use('/api/users', usersRouter);

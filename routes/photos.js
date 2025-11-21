@@ -8,6 +8,7 @@ const Album  = require('../models/Album');
 const s3 = require(   '../config/s3');
 const checkAuth = require('../middleware/check-auth');
 const { convertToWebP, isWebP } = require('../utils/imageConverter');
+const { generatePhotoKey, generatePremiumPhotoKey } = require('../utils/s3KeyGenerator');
 
 
 const storage =multer.memoryStorage({
@@ -17,6 +18,7 @@ const storage =multer.memoryStorage({
 })
 
 const upload= multer({storage,limits:{fileSize:2097152}}).single('image') // 2MB limit
+const uploadPremium = multer({storage,limits:{fileSize:2097152}}).single('premiumImage') // 2MB limit for premium
 
 router.post('/upload',checkAuth,upload,async (req,res,next)=>{
     let albumId = req.query.albumId;
@@ -47,10 +49,11 @@ router.post('/upload',checkAuth,upload,async (req,res,next)=>{
                             console.log('Photo is already in WebP format');
                         }
 
-                        // Generate unique key for S3 (always use .webp extension)
+                        // Generate unique key for S3 with album tracking
+                        const s3Key = generatePhotoKey(album.id);
                         const params={
                             Bucket:process.env.S3_BUCKET_NAME+'/Gallery',
-                            Key: `${uuid.v4()}.webp`,
+                            Key: s3Key,
                             Body: imageBuffer,
                             ContentType: contentType,
                             // ACL removed - bucket policy handles public access
@@ -109,7 +112,8 @@ router.delete('/delete/:photoId',checkAuth,(req,res,next)=>{
         .then(photo=>{
             if(!photo)res.status(400).json({message:'No such Photo Exists'})
             else{
-                const params = {Bucket: process.env.S3_BUCKET_NAME, Key: photo.storageId};
+                // storageId now includes full path: album-{albumId}/photo-...
+                const params = {Bucket: process.env.S3_BUCKET_NAME + '/Gallery', Key: photo.storageId};
                 s3.deleteObject(params, function(err, data) {
                     if(err){next(err)}
                     else photo
@@ -149,6 +153,89 @@ router.patch('/shares/:photoId', (req, res, next) => {
             });
         })
         .catch(err => next(err));
+});
+
+// Upload premium (non-watermarked) image for existing photo
+// This is optional - existing photos work fine without premium images
+router.post('/upload-premium/:photoId', checkAuth, uploadPremium, async (req, res, next) => {
+    const photoId = req.params.photoId;
+    const price = parseFloat(req.body.price) || 0;
+    
+    if (!req.file) {
+        return res.status(400).json({ message: 'Please include a premium image file!' });
+    }
+    
+    try {
+        Photo.findByPk(photoId)
+            .then(async (photo) => {
+                if (!photo) {
+                    return res.status(404).json({ message: 'Photo not found' });
+                }
+                
+                try {
+                    // Convert image to WebP format
+                    let imageBuffer = req.file.buffer;
+                    let contentType = 'image/webp';
+                    
+                    // Check if already WebP, if not convert
+                    const alreadyWebP = await isWebP(imageBuffer);
+                    if (!alreadyWebP) {
+                        console.log('Converting premium photo to WebP...');
+                        imageBuffer = await convertToWebP(imageBuffer, { 
+                            quality: 85,
+                            maxWidth: 1920,
+                            maxHeight: 1920
+                        });
+                        console.log('Premium photo converted to WebP successfully');
+                    } else {
+                        console.log('Premium photo is already in WebP format');
+                    }
+
+                    // Generate unique key for S3 with album and photo tracking
+                    const s3Key = generatePremiumPhotoKey(photo.albumId, photoId);
+                    const params = {
+                        Bucket: process.env.S3_BUCKET_NAME + '/Gallery',
+                        Key: s3Key,
+                        Body: imageBuffer,
+                        ContentType: contentType,
+                    };
+
+                    s3.upload(params, (error, data) => {
+                        if (error) {
+                            return res.status(error.statusCode || 500).json({ message: error.message });
+                        }
+                        
+                        console.log("Premium photo uploaded successfully as WebP!!");
+                        
+                        // Update photo with premium image and price
+                        photo.update({
+                            premiumImageUrl: data.Location,
+                            premiumStorageId: data.Key,
+                            price: price,
+                            isPremium: true
+                        })
+                        .then(() => {
+                            res.json({ 
+                                message: 'Premium photo uploaded successfully!', 
+                                photoId: photo.id,
+                                premiumImageUrl: data.Location,
+                                price: price
+                            });
+                        })
+                        .catch(err => {
+                            console.error('Error updating photo:', err);
+                            next(err);
+                        });
+                    });
+                } catch (conversionError) {
+                    console.error('Error converting premium photo to WebP:', conversionError);
+                    next(conversionError);
+                }
+            })
+            .catch(err => next(err));
+    } catch (error) {
+        next(error);
+    }
 });
 
 // router.patch('/likes/:photoId',checkAuth,(req,res,next)=>{

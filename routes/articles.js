@@ -10,6 +10,7 @@ const auth = require('../middleware/check-auth');
 const { mdToSafeHtml, estimateReadingTime } = require('../utils/markdown');
 const s3 = require('../config/s3');
 const { convertToWebP, isWebP } = require('../utils/imageConverter');
+const { generateArticleCoverKey, generateArticleFigureKey } = require('../utils/s3KeyGenerator');
 
 const router = express.Router();
 
@@ -48,10 +49,12 @@ router.post('/upload-cover', auth, upload, async (req, res, next) => {
             console.log('Cover image is already in WebP format');
         }
 
-        // Generate unique key for S3 (always use .webp extension)
+        // Generate unique key for S3 with article tracking (articleId may be null if uploaded before article creation)
+        const articleId = req.body.articleId || null; // Optional: if provided, include in path
+        const s3Key = generateArticleCoverKey(articleId);
         const params = {
             Bucket: process.env.S3_BUCKET_NAME,
-            Key: `Articles/cover-${uuid.v4()}.webp`,
+            Key: s3Key,
             Body: imageBuffer,
             ContentType: contentType,
             // ACL removed - bucket policy handles public access
@@ -100,10 +103,13 @@ router.post('/upload-figure', auth, uploadFigure, async (req, res, next) => {
             console.log('Figure image is already in WebP format');
         }
 
-        // Generate unique key for S3 (always use .webp extension)
+        // Generate unique key for S3 with article/section tracking (IDs may be null if uploaded before creation)
+        const articleId = req.body.articleId || null; // Optional: if provided, include in path
+        const sectionId = req.body.sectionId || null; // Optional: if provided, include in path
+        const s3Key = generateArticleFigureKey(articleId, sectionId);
         const params = {
             Bucket: process.env.S3_BUCKET_NAME,
-            Key: `Articles/figure-${uuid.v4()}.webp`,
+            Key: s3Key,
             Body: imageBuffer,
             ContentType: contentType,
             // ACL removed - bucket policy handles public access

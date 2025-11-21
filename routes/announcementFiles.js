@@ -3,6 +3,7 @@ const router = express.Router();
 const multer =require('multer')
 
 const uuid=require('uuid')
+const { generateAnnouncementKey } = require('../utils/s3KeyGenerator');
 const AnnouncementFile = require('../models/AnnouncementsFiles')
 const Announcements= require('../models/Announcements');
 const s3 = require(   '../config/s3');
@@ -48,10 +49,11 @@ router.post('/upload',checkAuth,upload,async (req,res,next)=>{
                             console.log('Announcement file is already in WebP format');
                         }
 
-                        // Generate unique key for S3 (always use .webp extension)
+                        // Generate unique key for S3 with announcement tracking
+                        const s3Key = generateAnnouncementKey(announcementId);
                         const params={
                             Bucket:'bbpsipbucket/AnnouncementFiles',
-                            Key:announcementId+'___'+`${uuid.v4()}.webp`,
+                            Key: s3Key,
                             Body: imageBuffer,
                             ContentType: contentType,
                             // ACL removed - bucket policy handles public access

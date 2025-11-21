@@ -67,16 +67,36 @@ router.delete('/delete/:albumId', checkAuth, async (req, res, next) => {
 
         // Delete all photos from S3 and DB
         const deletePromises = photos.map(async (photo) => {
+            // storageId now includes full path: album-{albumId}/photo-...
             const params = {
-                Bucket: process.env.S3_BUCKET_NAME,
+                Bucket: process.env.S3_BUCKET_NAME + '/Gallery',
                 Key: photo.storageId
             };
+            
+            // Also delete premium image if it exists
+            let premiumParams = null;
+            if (photo.premiumStorageId) {
+                premiumParams = {
+                    Bucket: process.env.S3_BUCKET_NAME + '/Gallery',
+                    Key: photo.premiumStorageId
+                };
+            }
             console.log(`Attempting to delete S3 object: Bucket=${params.Bucket}, Key=${params.Key}`);
 
             try {
-                // Wait for deletion from S3
+                // Wait for deletion from S3 (watermarked image)
                 await s3.deleteObject(params).promise();
                 console.log(`✅ Successfully deleted photo from S3: ${params.Key}`);
+                
+                // Delete premium image if it exists
+                if (premiumParams) {
+                    try {
+                        await s3.deleteObject(premiumParams).promise();
+                        console.log(`✅ Successfully deleted premium photo from S3: ${premiumParams.Key}`);
+                    } catch (premiumErr) {
+                        console.error(`❌ Failed to delete premium photo ${premiumParams.Key} from S3:`, premiumErr.message);
+                    }
+                }
             } catch (deleteErr) {
                 console.error(`❌ Failed to delete photo ${params.Key} from S3:`, deleteErr.message);
                 console.error('Error details:', JSON.stringify(deleteErr, null, 2));
