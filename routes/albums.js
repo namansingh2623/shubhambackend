@@ -135,9 +135,29 @@ router.get('/all', async (req, res, next) => {
 
 router.get('/:id', (req,res,next)=>{
     Album
-        .findByPk(req.params.id,{include:'photos'})
-        .then(album=>{(album)?res.json(album):res.status(404).json({message:'No album found with given id'})})
-        .catch(err=>next(err))
+        .findByPk(req.params.id, {
+            include: [{
+                model: Photo
+            }]
+        })
+        .then(album=>{
+            if(album){
+                // Sequelize returns photos in a Photos array (capitalized, pluralized)
+                // Convert to lowercase 'photos' for frontend compatibility
+                const albumData = album.toJSON();
+                if (albumData.Photos) {
+                    albumData.photos = albumData.Photos;
+                    delete albumData.Photos;
+                }
+                res.json(albumData);
+            } else {
+                res.status(404).json({message:'No album found with given id'});
+            }
+        })
+        .catch(err=>{
+            console.error('Error fetching album:', err);
+            next(err);
+        })
 });
 
 router.patch('/setCoverImage/:albumId',checkAuth,(req,res,next)=>{
