@@ -170,7 +170,8 @@ router.patch('/setCoverImage/:albumId',checkAuth,(req,res,next)=>{
         })
         .catch(err =>next(err))
 })
-router.patch('/likes/:albumId', checkAuth, (req, res, next) => {
+router.patch('/likes/:albumId', (req, res, next) => {
+    // Removed checkAuth to allow likes without login
     Album.findByPk(req.params.albumId)
         .then(album => {
             if (!album) return res.status(404).json({ message: 'Album not found' });

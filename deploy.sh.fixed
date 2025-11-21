@@ -1,0 +1,78 @@
+#!/bin/bash
+
+# Fixed Deploy Script - Handles divergent branches after force push
+# This script resets local branches to match origin/main when there's a divergence
+
+set -e  # Exit on error
+
+echo "=== Starting Deployment ==="
+
+# Function to safely pull with reset on divergence
+safe_pull() {
+    local repo_path=$1
+    local branch=${2:-main}
+    
+    echo "Updating $repo_path (branch: $branch)..."
+    cd "$repo_path" || exit 1
+    
+    # Fetch latest changes
+    git fetch origin "$branch" || {
+        echo "ERROR: Failed to fetch from origin/$branch"
+        return 1
+    }
+    
+    # Check if local and remote have diverged
+    local local_commit=$(git rev-parse HEAD 2>/dev/null || echo "")
+    local remote_commit=$(git rev-parse "origin/$branch" 2>/dev/null || echo "")
+    
+    if [ -z "$local_commit" ] || [ -z "$remote_commit" ]; then
+        echo "ERROR: Could not determine commit hashes"
+        return 1
+    fi
+    
+    # If commits differ, reset local to match remote (handles force-push scenario)
+    if [ "$local_commit" != "$remote_commit" ]; then
+        echo "Local and remote branches differ. Resetting local to match origin/$branch..."
+        git reset --hard "origin/$branch" || {
+            echo "ERROR: Failed to reset to origin/$branch"
+            return 1
+        }
+        echo "✅ Successfully reset to origin/$branch"
+    else
+        echo "✅ Already up to date with origin/$branch"
+    fi
+    
+    return 0
+}
+
+# Update Backend
+if [ -d "blog" ]; then
+    if safe_pull "blog" "main"; then
+        echo "✅ Backend updated successfully"
+    else
+        echo "ERROR: Failed to update Backend"
+        exit 1
+    fi
+else
+    echo "ERROR: Backend directory not found"
+    exit 1
+fi
+
+# Update Frontend (if exists)
+if [ -d "../shubhamReact/naman" ]; then
+    if safe_pull "../shubhamReact/naman" "main"; then
+        echo "✅ Frontend updated successfully"
+    else
+        echo "ERROR: Failed to update Frontend"
+        exit 1
+    fi
+fi
+
+echo "=== Deployment Complete ==="
+
+# Add your restart commands here
+# Example:
+# pm2 restart all
+# docker-compose restart
+# etc.
+
