@@ -112,10 +112,39 @@ router.delete('/delete/:photoId',checkAuth,(req,res,next)=>{
         .then(photo=>{
             if(!photo)res.status(400).json({message:'No such Photo Exists'})
             else{
-                // storageId now includes full path: album-{albumId}/photo-...
-                const params = {Bucket: process.env.S3_BUCKET_NAME + '/Gallery', Key: photo.storageId};
+                // Handle both old format (just UUID) and new format (album-{id}/photo-...)
+                // Old images: storageId is just "uuid.webp"
+                // New images: storageId is "album-{id}/photo-{timestamp}-{uuid}.webp"
+                let bucket = process.env.S3_BUCKET_NAME;
+                let key = photo.storageId;
+                
+                // If storageId doesn't start with "album-", it's an old format image
+                if (!photo.storageId.startsWith('album-')) {
+                    // Old format: just append /Gallery
+                    bucket = bucket + '/Gallery';
+                } else {
+                    // New format: already includes path, just use Gallery bucket
+                    bucket = bucket + '/Gallery';
+                }
+                
+                const params = {Bucket: bucket, Key: key};
                 s3.deleteObject(params, function(err, data) {
-                    if(err){next(err)}
+                    if(err){
+                        console.error('S3 delete error:', err);
+                        // Try alternative path for old images
+                        if (!photo.storageId.startsWith('album-')) {
+                            const altParams = {Bucket: process.env.S3_BUCKET_NAME, Key: key};
+                            s3.deleteObject(altParams, function(altErr, altData) {
+                                if(altErr){next(altErr)}
+                                else photo
+                                    .destroy()
+                                    .then(()=>{res.json({message:'Photo was deleted!',data:altData})})
+                                    .catch(err=>next(err))
+                            });
+                        } else {
+                            next(err);
+                        }
+                    }
                     else photo
                         .destroy()
                         .then(()=>{res.json({message:'Photo was deleted!',data:data})})
