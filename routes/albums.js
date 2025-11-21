@@ -172,13 +172,19 @@ router.patch('/setCoverImage/:albumId',checkAuth,(req,res,next)=>{
 })
 router.patch('/likes/:albumId', (req, res, next) => {
     // Removed checkAuth to allow likes without login
+    // Supports toggle: if action is 'unlike', decrement; otherwise increment
+    const action = req.body.action || 'like'; // 'like' or 'unlike'
     Album.findByPk(req.params.albumId)
         .then(album => {
             if (!album) return res.status(404).json({ message: 'Album not found' });
             // Handle null values - default to 0 if like is null
             const currentLike = album.like === null || album.like === undefined ? 0 : album.like;
-            // Update with the new value (current + 1)
-            return album.update({ like: currentLike + 1 }).then(() => {
+            // Toggle: increment for like, decrement for unlike (but don't go below 0)
+            const newLike = action === 'unlike' 
+                ? Math.max(0, currentLike - 1) 
+                : currentLike + 1;
+            // Update with the new value
+            return album.update({ like: newLike }).then(() => {
                 return album.reload();  // reload updated values from DB
             }).then(updatedAlbum => {
                 // Ensure we always return a number, not null
