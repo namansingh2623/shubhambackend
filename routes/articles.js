@@ -361,13 +361,28 @@ router.get('/admin/:id', auth, async (req, res, next) => {
     try {
         const article = await Article.findByPk(req.params.id, {
             include: [
-                { model: ArticleSection, as: 'sections', include: [{ model: ArticleFigure, as: 'figures' }] },
-            ],
-            order: [
-                ['sections', 'order', 'ASC'],
-                ['sections', 'figures', 'order', 'ASC']
+                { 
+                    model: ArticleSection, 
+                    as: 'sections', 
+                    include: [{ 
+                        model: ArticleFigure, 
+                        as: 'figures',
+                        separate: true, // Fetch figures separately to prevent section duplication
+                    }],
+                    order: [['order', 'ASC']],
+                },
             ],
         });
+        
+        // Ensure figures are sorted within each section
+        if (article && article.sections) {
+            article.sections.forEach(section => {
+                if (section.figures && Array.isArray(section.figures)) {
+                    section.figures.sort((a, b) => a.order - b.order);
+                }
+            });
+        }
+        
         if (!article) return res.status(404).json({ message: 'Article not found' });
         res.json({ article });
     } catch (e) {
@@ -511,13 +526,28 @@ router.get('/:slug', async (req, res, next) => {
         const article = await Article.findOne({
             where: { slug: req.params.slug, status: 'published' },
             include: [
-                { model: ArticleSection, as: 'sections', include: [{ model: ArticleFigure, as: 'figures' }] },
-            ],
-            order: [
-                ['sections', 'order', 'ASC'],
-                ['sections', 'figures', 'order', 'ASC']
+                { 
+                    model: ArticleSection, 
+                    as: 'sections', 
+                    include: [{ 
+                        model: ArticleFigure, 
+                        as: 'figures',
+                        separate: true, // Fetch figures separately to prevent section duplication
+                    }],
+                    order: [['order', 'ASC']],
+                },
             ],
         });
+        
+        // Ensure figures are sorted within each section
+        if (article && article.sections) {
+            article.sections.forEach(section => {
+                if (section.figures && Array.isArray(section.figures)) {
+                    section.figures.sort((a, b) => a.order - b.order);
+                }
+            });
+        }
+        
         if (!article) return res.status(404).json({ message: 'Not found' });
         res.json({ article });
     } catch (e) {
