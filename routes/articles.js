@@ -205,9 +205,60 @@ router.put('/:id/sections', auth, async (req, res, next) => {
             return res.json({ success: true, message: 'No sections to update' });
         }
 
+        // Robust deduplication: Remove duplicates by ID, order+title, and order+bodyMarkdown
+        const seenById = new Map();
+        const seenByOrderTitle = new Map();
+        const seenByOrderBody = new Map();
+        const uniqueSections = [];
+        
+        for (const s of sections) {
+            let isDuplicate = false;
+            
+            if (s.id) {
+                // Check by ID first
+                if (seenById.has(s.id)) {
+                    console.log(`Warning: Duplicate section ID ${s.id} found in request, skipping`);
+                    isDuplicate = true;
+                } else {
+                    seenById.set(s.id, true);
+                }
+            }
+            
+            if (!isDuplicate) {
+                // Check by order + title
+                const keyOrderTitle = `${s.order || 0}-${(s.title || '').trim()}`;
+                if (seenByOrderTitle.has(keyOrderTitle)) {
+                    console.log(`Warning: Duplicate section with order ${s.order} and title "${s.title}" found, skipping`);
+                    isDuplicate = true;
+                } else {
+                    seenByOrderTitle.set(keyOrderTitle, true);
+                }
+            }
+            
+            if (!isDuplicate) {
+                // Also check by order + bodyMarkdown (first 100 chars) as additional safeguard
+                const bodyPreview = (s.bodyMarkdown || '').substring(0, 100).trim();
+                const keyOrderBody = `${s.order || 0}-${bodyPreview}`;
+                if (seenByOrderBody.has(keyOrderBody) && bodyPreview.length > 0) {
+                    console.log(`Warning: Duplicate section with order ${s.order} and similar body found, skipping`);
+                    isDuplicate = true;
+                } else if (bodyPreview.length > 0) {
+                    seenByOrderBody.set(keyOrderBody, true);
+                }
+            }
+            
+            if (!isDuplicate) {
+                uniqueSections.push(s);
+            }
+        }
+        
+        if (uniqueSections.length !== sections.length) {
+            console.log(`Deduplication: ${sections.length} sections received, ${uniqueSections.length} unique sections after deduplication`);
+        }
+
         let totalWords = 0;
 
-        for (const s of sections) {
+        for (const s of uniqueSections) {
             let safeHtml;
             try {
                 safeHtml = mdToSafeHtml(s.bodyMarkdown || '');
@@ -223,26 +274,68 @@ router.put('/:id/sections', auth, async (req, res, next) => {
                 console.log(`Updating existing section ${s.id}`);
                 section = await ArticleSection.findByPk(s.id);
                 if (!section) {
-                    console.log(`Section ${s.id} not found, skipping`);
-                    continue;
+                    console.log(`Section ${s.id} not found, checking for existing section with same order+title`);
+                    // If section ID not found, check if section with same order+title exists
+                    const existing = await ArticleSection.findOne({
+                        where: {
+                            articleId: article.id,
+                            order: s.order,
+                            title: s.title
+                        }
+                    });
+                    if (existing) {
+                        console.log(`Found existing section ${existing.id} with same order+title, updating it`);
+                        section = existing;
+                    } else {
+                        console.log(`No existing section found, creating new one`);
+                        section = await ArticleSection.create({
+                            articleId: article.id,
+                            order: s.order,
+                            title: s.title,
+                            bodyMarkdown: s.bodyMarkdown,
+                            bodyHtml: safeHtml,
+                        });
+                        console.log(`Created section ${section.id}`);
+                    }
+                } else {
+                    await section.update({
+                        order: s.order,
+                        title: s.title,
+                        bodyMarkdown: s.bodyMarkdown,
+                        bodyHtml: safeHtml,
+                    });
+                    console.log(`Updated section ${s.id}`);
                 }
-                await section.update({
-                    order: s.order,
-                    title: s.title,
-                    bodyMarkdown: s.bodyMarkdown,
-                    bodyHtml: safeHtml,
-                });
-                console.log(`Updated section ${s.id}`);
             } else {
-                console.log(`Creating new section for article ${article.id}`);
-                section = await ArticleSection.create({
-                    articleId: article.id,
-                    order: s.order,
-                    title: s.title,
-                    bodyMarkdown: s.bodyMarkdown,
-                    bodyHtml: safeHtml,
+                // Check if section with same order+title already exists
+                const existing = await ArticleSection.findOne({
+                    where: {
+                        articleId: article.id,
+                        order: s.order,
+                        title: s.title
+                    }
                 });
-                console.log(`Created section ${section.id}`);
+                if (existing) {
+                    console.log(`Found existing section ${existing.id} with same order+title, updating it instead of creating new`);
+                    section = existing;
+                    await section.update({
+                        order: s.order,
+                        title: s.title,
+                        bodyMarkdown: s.bodyMarkdown,
+                        bodyHtml: safeHtml,
+                    });
+                    console.log(`Updated existing section ${section.id}`);
+                } else {
+                    console.log(`Creating new section for article ${article.id}`);
+                    section = await ArticleSection.create({
+                        articleId: article.id,
+                        order: s.order,
+                        title: s.title,
+                        bodyMarkdown: s.bodyMarkdown,
+                        bodyHtml: safeHtml,
+                    });
+                    console.log(`Created section ${section.id}`);
+                }
             }
 
             if (Array.isArray(s.figures)) {
@@ -359,17 +452,34 @@ router.get('/', async (req, res, next) => {
 // Admin fetch by ID (includes drafts)
 router.get('/admin/:id', auth, async (req, res, next) => {
     try {
-        const article = await Article.findByPk(req.params.id, {
-            include: [
-                { model: ArticleSection, as: 'sections', include: [{ model: ArticleFigure, as: 'figures' }] },
-            ],
-            order: [
-                ['sections', 'order', 'ASC'],
-                ['sections', 'figures', 'order', 'ASC']
-            ],
-        });
+        const article = await Article.findByPk(req.params.id);
         if (!article) return res.status(404).json({ message: 'Article not found' });
-        res.json({ article });
+        
+        // Fetch sections separately to avoid JOIN duplication
+        const sections = await ArticleSection.findAll({
+            where: { articleId: article.id },
+            order: [['order', 'ASC']],
+        });
+        
+        // Fetch figures separately for each section
+        const sectionsWithFigures = await Promise.all(
+            sections.map(async (section) => {
+                const figures = await ArticleFigure.findAll({
+                    where: { sectionId: section.id },
+                    order: [['order', 'ASC']],
+                });
+                // Convert to plain objects
+                const sectionData = section.toJSON();
+                sectionData.figures = figures.map(f => f.toJSON());
+                return sectionData;
+            })
+        );
+        
+        // Convert article to plain object and attach sections
+        const articleData = article.toJSON();
+        articleData.sections = sectionsWithFigures;
+        
+        res.json({ article: articleData });
     } catch (e) {
         next(e);
     }
@@ -510,16 +620,34 @@ router.get('/:slug', async (req, res, next) => {
     try {
         const article = await Article.findOne({
             where: { slug: req.params.slug, status: 'published' },
-            include: [
-                { model: ArticleSection, as: 'sections', include: [{ model: ArticleFigure, as: 'figures' }] },
-            ],
-            order: [
-                ['sections', 'order', 'ASC'],
-                ['sections', 'figures', 'order', 'ASC']
-            ],
         });
         if (!article) return res.status(404).json({ message: 'Not found' });
-        res.json({ article });
+        
+        // Fetch sections separately to avoid JOIN duplication
+        const sections = await ArticleSection.findAll({
+            where: { articleId: article.id },
+            order: [['order', 'ASC']],
+        });
+        
+        // Fetch figures separately for each section
+        const sectionsWithFigures = await Promise.all(
+            sections.map(async (section) => {
+                const figures = await ArticleFigure.findAll({
+                    where: { sectionId: section.id },
+                    order: [['order', 'ASC']],
+                });
+                // Convert to plain objects
+                const sectionData = section.toJSON();
+                sectionData.figures = figures.map(f => f.toJSON());
+                return sectionData;
+            })
+        );
+        
+        // Convert article to plain object and attach sections
+        const articleData = article.toJSON();
+        articleData.sections = sectionsWithFigures;
+        
+        res.json({ article: articleData });
     } catch (e) {
         next(e);
     }
