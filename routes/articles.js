@@ -359,28 +359,16 @@ router.get('/', async (req, res, next) => {
 // Admin fetch by ID (includes drafts)
 router.get('/admin/:id', auth, async (req, res, next) => {
     try {
-        const article = await Article.findByPk(req.params.id);
-        
-        if (!article) return res.status(404).json({ message: 'Article not found' });
-        
-        // Fetch sections separately to avoid duplication
-        const sections = await ArticleSection.findAll({
-            where: { articleId: article.id },
-            order: [['order', 'ASC']],
+        const article = await Article.findByPk(req.params.id, {
+            include: [
+                { model: ArticleSection, as: 'sections', include: [{ model: ArticleFigure, as: 'figures' }] },
+            ],
+            order: [
+                ['sections', 'order', 'ASC'],
+                ['sections', 'figures', 'order', 'ASC']
+            ],
         });
-        
-        // Fetch figures separately for each section to prevent duplication
-        for (const section of sections) {
-            const figures = await ArticleFigure.findAll({
-                where: { sectionId: section.id },
-                order: [['order', 'ASC']],
-            });
-            section.figures = figures;
-        }
-        
-        // Attach sections to article object
-        article.sections = sections;
-        
+        if (!article) return res.status(404).json({ message: 'Article not found' });
         res.json({ article });
     } catch (e) {
         next(e);
@@ -522,28 +510,15 @@ router.get('/:slug', async (req, res, next) => {
     try {
         const article = await Article.findOne({
             where: { slug: req.params.slug, status: 'published' },
+            include: [
+                { model: ArticleSection, as: 'sections', include: [{ model: ArticleFigure, as: 'figures' }] },
+            ],
+            order: [
+                ['sections', 'order', 'ASC'],
+                ['sections', 'figures', 'order', 'ASC']
+            ],
         });
-        
         if (!article) return res.status(404).json({ message: 'Not found' });
-        
-        // Fetch sections separately to avoid duplication
-        const sections = await ArticleSection.findAll({
-            where: { articleId: article.id },
-            order: [['order', 'ASC']],
-        });
-        
-        // Fetch figures separately for each section to prevent duplication
-        for (const section of sections) {
-            const figures = await ArticleFigure.findAll({
-                where: { sectionId: section.id },
-                order: [['order', 'ASC']],
-            });
-            section.figures = figures;
-        }
-        
-        // Attach sections to article object
-        article.sections = sections;
-        
         res.json({ article });
     } catch (e) {
         next(e);
