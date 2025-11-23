@@ -339,27 +339,141 @@ router.put('/:id/sections', auth, async (req, res, next) => {
             }
 
             if (Array.isArray(s.figures)) {
+                // Step 1: Deduplicate figures in the request
+                const seenById = new Map();
+                const seenByOrderUrl = new Map();
+                const uniqueFigures = [];
+                
                 for (const f of s.figures) {
-                    if (f.id) {
-                        const fig = await ArticleFigure.findByPk(f.id);
-                        if (fig) {
-                            await fig.update({
-                                sectionId: section.id,
-                                order: f.order,
-                                imageUrl: f.imageUrl,
-                                caption: f.caption || null,
-                                altText: f.altText || null,
-                            });
-                        }
-                    } else {
-                        await ArticleFigure.create({
-                            sectionId: section.id,
-                            order: f.order,
-                            imageUrl: f.imageUrl,
-                            caption: f.caption || null,
-                            altText: f.altText || null,
-                        });
+                    // Validate required fields
+                    if (!f.imageUrl || typeof f.imageUrl !== 'string' || f.imageUrl.trim() === '') {
+                        console.log(`Warning: Skipping figure with invalid or empty imageUrl`);
+                        continue;
                     }
+                    
+                    // Validate order is a number
+                    if (f.order !== undefined && (typeof f.order !== 'number' || isNaN(f.order))) {
+                        console.log(`Warning: Invalid order for figure, defaulting to 0`);
+                        f.order = 0;
+                    }
+                    
+                    // Validate ID if present
+                    if (f.id !== undefined && (typeof f.id !== 'number' || isNaN(f.id) || f.id <= 0)) {
+                        console.log(`Warning: Invalid ID for figure, treating as new figure`);
+                        f.id = undefined;
+                    }
+                    
+                    let isDuplicate = false;
+                    
+                    // Check by ID first (most reliable)
+                    if (f.id && typeof f.id === 'number') {
+                        if (seenById.has(f.id)) {
+                            console.log(`Warning: Duplicate figure ID ${f.id} found in request, skipping`);
+                            isDuplicate = true;
+                        } else {
+                            seenById.set(f.id, true);
+                        }
+                    }
+                    
+                    // Check by order+imageUrl (for figures without IDs or as backup)
+                    if (!isDuplicate) {
+                        const key = `${f.order || 0}-${(f.imageUrl || '').trim()}`;
+                        if (seenByOrderUrl.has(key)) {
+                            console.log(`Warning: Duplicate figure with order ${f.order} and imageUrl "${f.imageUrl}" found, skipping`);
+                            isDuplicate = true;
+                        } else {
+                            seenByOrderUrl.set(key, true);
+                        }
+                    }
+                    
+                    if (!isDuplicate) {
+                        uniqueFigures.push(f);
+                    }
+                }
+                
+                // Step 2: Get all existing figures for this section
+                const existingFigures = await ArticleFigure.findAll({
+                    where: { sectionId: section.id }
+                });
+                
+                // Step 3: Build maps for efficient lookup
+                const existingById = new Map();
+                const existingByOrderUrl = new Map();
+                existingFigures.forEach(fig => {
+                    if (fig.id) existingById.set(fig.id, fig);
+                    const key = `${fig.order}-${fig.imageUrl}`;
+                    existingByOrderUrl.set(key, fig);
+                });
+                
+                // Step 4: Identify figures to keep, update, and delete
+                const figuresToKeep = new Set();
+                const figuresToUpdate = [];
+                const figuresToCreate = [];
+                
+                for (const f of uniqueFigures) {
+                    let existingFig = null;
+                    
+                    // Try to find by ID first
+                    if (f.id && typeof f.id === 'number') {
+                        existingFig = existingById.get(f.id);
+                        // Validate that the figure belongs to this section
+                        if (existingFig && existingFig.sectionId !== section.id) {
+                            console.log(`Warning: Figure ${f.id} belongs to different section, treating as new`);
+                            existingFig = null;
+                        }
+                    }
+                    
+                    // If not found by ID, try by order+imageUrl
+                    if (!existingFig) {
+                        const key = `${f.order || 0}-${(f.imageUrl || '').trim()}`;
+                        existingFig = existingByOrderUrl.get(key);
+                    }
+                    
+                    if (existingFig) {
+                        figuresToKeep.add(existingFig.id);
+                        figuresToUpdate.push({ existing: existingFig, data: f });
+                    } else {
+                        figuresToCreate.push(f);
+                    }
+                }
+                
+                // Step 5: Delete orphaned figures (not in the new list)
+                for (const existingFig of existingFigures) {
+                    if (!figuresToKeep.has(existingFig.id)) {
+                        console.log(`Deleting orphaned figure ${existingFig.id}`);
+                        await existingFig.destroy();
+                    }
+                }
+                
+                // Step 6: Update existing figures
+                for (const { existing, data } of figuresToUpdate) {
+                    await existing.update({
+                        sectionId: section.id, // Ensure correct section
+                        order: data.order || existing.order,
+                        imageUrl: data.imageUrl || existing.imageUrl,
+                        caption: data.caption || null,
+                        altText: data.altText || null,
+                    });
+                }
+                
+                // Step 7: Create new figures
+                for (const f of figuresToCreate) {
+                    const newFig = await ArticleFigure.create({
+                        sectionId: section.id,
+                        order: f.order || 0,
+                        imageUrl: f.imageUrl.trim(),
+                        caption: f.caption || null,
+                        altText: f.altText || null,
+                    });
+                    console.log(`Created new figure ${newFig.id} for section ${section.id}`);
+                }
+            } else {
+                // If no figures array provided, delete all existing figures for this section
+                const existingFigures = await ArticleFigure.findAll({
+                    where: { sectionId: section.id }
+                });
+                for (const fig of existingFigures) {
+                    await fig.destroy();
                 }
             }
         }
@@ -468,9 +582,39 @@ router.get('/admin/:id', auth, async (req, res, next) => {
                     where: { sectionId: section.id },
                     order: [['order', 'ASC']],
                 });
+                
+                // Deduplicate figures by ID, or by order+imageUrl if no ID
+                const seenById = new Map();
+                const seenByOrderUrl = new Map();
+                const uniqueFigures = [];
+                
+                for (const figure of figures) {
+                    const figData = figure.toJSON();
+                    let isDuplicate = false;
+                    
+                    if (figData.id && seenById.has(figData.id)) {
+                        isDuplicate = true;
+                    } else if (figData.id) {
+                        seenById.set(figData.id, true);
+                    }
+                    
+                    if (!isDuplicate) {
+                        const key = `${figData.order || 0}-${figData.imageUrl || ''}`;
+                        if (seenByOrderUrl.has(key)) {
+                            isDuplicate = true;
+                        } else {
+                            seenByOrderUrl.set(key, true);
+                        }
+                    }
+                    
+                    if (!isDuplicate) {
+                        uniqueFigures.push(figData);
+                    }
+                }
+                
                 // Convert to plain objects
                 const sectionData = section.toJSON();
-                sectionData.figures = figures.map(f => f.toJSON());
+                sectionData.figures = uniqueFigures;
                 return sectionData;
             })
         );
@@ -636,9 +780,39 @@ router.get('/:slug', async (req, res, next) => {
                     where: { sectionId: section.id },
                     order: [['order', 'ASC']],
                 });
+                
+                // Deduplicate figures by ID, or by order+imageUrl if no ID
+                const seenById = new Map();
+                const seenByOrderUrl = new Map();
+                const uniqueFigures = [];
+                
+                for (const figure of figures) {
+                    const figData = figure.toJSON();
+                    let isDuplicate = false;
+                    
+                    if (figData.id && seenById.has(figData.id)) {
+                        isDuplicate = true;
+                    } else if (figData.id) {
+                        seenById.set(figData.id, true);
+                    }
+                    
+                    if (!isDuplicate) {
+                        const key = `${figData.order || 0}-${figData.imageUrl || ''}`;
+                        if (seenByOrderUrl.has(key)) {
+                            isDuplicate = true;
+                        } else {
+                            seenByOrderUrl.set(key, true);
+                        }
+                    }
+                    
+                    if (!isDuplicate) {
+                        uniqueFigures.push(figData);
+                    }
+                }
+                
                 // Convert to plain objects
                 const sectionData = section.toJSON();
-                sectionData.figures = figures.map(f => f.toJSON());
+                sectionData.figures = uniqueFigures;
                 return sectionData;
             })
         );
