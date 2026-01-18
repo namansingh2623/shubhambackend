@@ -27,9 +27,10 @@ require('dotenv').config();
 const albumsRouter = require('./routes/albums');
 const usersRouter = require('./routes/users');
 const photosRouter = require('./routes/photos');
-const AnnouncementRouter=require('./routes/announcements');
+const AnnouncementRouter = require('./routes/announcements');
 const articlesRouter = require('./routes/articles');
-const AnnouncementFileRouter=require('./routes/announcementFiles')
+const contactRouter = require('./routes/contact');
+const AnnouncementFileRouter = require('./routes/announcementFiles')
 
 const db = require('./config/database');
 require('./models/index');
@@ -84,7 +85,7 @@ app.use((req, res, next) => {
     }
 });
 
-app.use(bodyParser.urlencoded({extended: false}));
+app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
 
@@ -92,8 +93,9 @@ app.use(bodyParser.json());
 app.use('/users', usersRouter);
 app.use('/albums', albumsRouter);
 app.use('/photos', photosRouter);
-app.use('/Announcement',AnnouncementRouter);
+app.use('/Announcement', AnnouncementRouter);
 app.use('/articles', articlesRouter);   // ← mount here
+app.use('/contact', contactRouter); // Changed from /api/contact to match localhost pattern
 // app.use('/AnnouncementFiles',AnnouncementFileRouter);
 //routes for ec2 server
 
@@ -104,7 +106,7 @@ app.use('/articles', articlesRouter);   // ← mount here
 
 
 //error
-app.use((req,res,next)=>{
+app.use((req, res, next) => {
     let err = new Error('Not Found');
     err.status = 404;
 
@@ -126,7 +128,7 @@ app.use((error, req, res, next) => {
             }
         });
     }
-    
+
     // Handle other Sequelize errors
     if (error.name && error.name.startsWith('Sequelize')) {
         return res.status(400).json({
@@ -136,7 +138,7 @@ app.use((error, req, res, next) => {
             }
         });
     }
-    
+
     // Handle other errors
     res.status(error.status || 500).json({
         error: {

@@ -9,6 +9,7 @@ const ArticleSection = require('./ArticleSection');
 const ArticleFigure = require('./ArticleFigure');
 const Tag = require('./Tag');
 const ArticleTag = require('./ArticleTag');
+const Message = require('./Message');
 
 // Add Associations here
 
@@ -48,4 +49,5 @@ module.exports = {
     ArticleFigure,
     Tag,
     ArticleTag,
+    Message
 };
