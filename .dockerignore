@@ -7,4 +7,7 @@ README.md
 test
 *.md
 .DS_Store
-
+shubham_key.pem
+shubhampem.pem
+/shubham_key.pem
+/shubhampem.pem

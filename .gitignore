@@ -24,3 +24,8 @@ Thumbs.db
 dist/
 build/
 
+# AI Artifacts
+implementation_plan.md
+task.md
+walkthrough.md
+DEPLOY_COMMANDS.md
