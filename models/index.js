@@ -1,6 +1,7 @@
 const Album = require('./Album');
 const Photo = require('./Photo');
 const User = require('./User');
+const AppUser = require('./AppUser');
 const Announcements = require('./Announcements');
 
 // New article stack
@@ -39,6 +40,7 @@ Tag.belongsToMany(Article, { through: ArticleTag, foreignKey: 'tagId' });
 // Export all models
 module.exports = {
     User,
+    AppUser,
     Announcements,
     Album,
     Photo,

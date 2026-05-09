@@ -31,6 +31,7 @@ const AnnouncementRouter = require('./routes/announcements');
 const articlesRouter = require('./routes/articles');
 const contactRouter = require('./routes/contact');
 const AnnouncementFileRouter = require('./routes/announcementFiles')
+const authRouter = require('./routes/auth');
 
 const db = require('./config/database');
 require('./models/index');
@@ -100,6 +101,7 @@ app.use('/photos', photosRouter);
 app.use('/Announcement', AnnouncementRouter);
 app.use('/articles', articlesRouter);   // ← mount here
 app.use('/contact', contactRouter); // Changed from /api/contact to match localhost pattern
+app.use('/auth', authRouter);
 // app.use('/AnnouncementFiles',AnnouncementFileRouter);
 //routes for ec2 server
 
