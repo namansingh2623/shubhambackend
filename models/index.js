@@ -3,6 +3,7 @@ const Photo = require('./Photo');
 const User = require('./User');
 const AppUser = require('./AppUser');
 const Announcements = require('./Announcements');
+const ImageLike = require('./ImageLike');
 
 // New article stack
 const Article = require('./Article');
@@ -17,6 +18,13 @@ const Message = require('./Message');
 // Albums ↔ Photos
 Album.hasMany(Photo, { foreignKey: 'albumId', onDelete: 'CASCADE' });
 Photo.belongsTo(Album, { foreignKey: 'albumId' });
+
+// Likes ↔ Users & Albums
+AppUser.hasMany(ImageLike, { foreignKey: 'user_id', onDelete: 'CASCADE' });
+ImageLike.belongsTo(AppUser, { foreignKey: 'user_id' });
+
+Album.hasMany(ImageLike, { foreignKey: 'album_id', onDelete: 'CASCADE' });
+ImageLike.belongsTo(Album, { foreignKey: 'album_id' });
 
 // Articles → Sections → Figures
 Article.hasMany(ArticleSection, {
@@ -51,5 +59,6 @@ module.exports = {
     ArticleFigure,
     Tag,
     ArticleTag,
-    Message
+    Message,
+    ImageLike
 };

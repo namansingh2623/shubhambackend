@@ -3,6 +3,7 @@ const app = express();
 const morgan = require('morgan');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const cookieParser = require('cookie-parser');
 // CORS configuration - Allow all origins for Docker deployment (nginx handles routing)
 app.use(cors({
     origin: process.env.ALLOWED_ORIGINS || '*',
@@ -48,6 +49,7 @@ if (process.env.NODE_ENV !== 'production') {
     });
 }
 app.use(morgan('dev'));
+app.use(cookieParser());
 
 // Raw body parser for articles endpoints (handles content-type issues)
 app.use((req, res, next) => {

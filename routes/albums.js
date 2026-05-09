@@ -3,8 +3,10 @@ const router = express.Router();
 
 const Album = require('../models/Album');
 const Photo = require('../models/Photo');
+const ImageLike = require('../models/ImageLike');
 const s3 = require('../config/s3');
 const checkAuth = require('../middleware/check-auth');
+const getUserOptional = require('../middleware/get-user-optional');
 
 //create album
 router.post('/create', checkAuth,(req,res,next)=>{
@@ -170,30 +172,57 @@ router.patch('/setCoverImage/:albumId',checkAuth,(req,res,next)=>{
         })
         .catch(err =>next(err))
 })
-router.patch('/likes/:albumId', (req, res, next) => {
-    // Removed checkAuth to allow likes without login
-    // Supports toggle: if action is 'unlike', decrement; otherwise increment
-    const action = req.body.action || 'like'; // 'like' or 'unlike'
-    Album.findByPk(req.params.albumId)
-        .then(album => {
-            if (!album) return res.status(404).json({ message: 'Album not found' });
-            // Handle null values - default to 0 if like is null
-            const currentLike = album.like === null || album.like === undefined ? 0 : album.like;
-            // Toggle: increment for like, decrement for unlike (but don't go below 0)
+router.patch('/likes/:albumId', getUserOptional, async (req, res, next) => {
+    try {
+        const action = req.body.action || 'like'; // 'like' or 'unlike'
+        const albumId = req.params.albumId;
+        const user = req.user;
+
+        const album = await Album.findByPk(albumId);
+        if (!album) return res.status(404).json({ message: 'Album not found' });
+
+        // Handle null values - default to 0 if like is null
+        const currentLike = album.like === null || album.like === undefined ? 0 : album.like;
+
+        if (user && user.role === 'app_user') {
+            // Logged-in user flow
+            if (action === 'like') {
+                // Check if already liked
+                const existingLike = await ImageLike.findOne({ 
+                    where: { user_id: user.id, album_id: albumId } 
+                });
+
+                if (!existingLike) {
+                    await ImageLike.create({ user_id: user.id, album_id: albumId });
+                    await album.update({ like: currentLike + 1 });
+                }
+            } else {
+                // Unlike
+                const deleted = await ImageLike.destroy({ 
+                    where: { user_id: user.id, album_id: albumId } 
+                });
+
+                if (deleted > 0) {
+                    await album.update({ like: Math.max(0, currentLike - 1) });
+                }
+            }
+        } else {
+            // Anonymous user flow (fallback to old behavior)
             const newLike = action === 'unlike' 
                 ? Math.max(0, currentLike - 1) 
                 : currentLike + 1;
-            // Update with the new value
-            return album.update({ like: newLike }).then(() => {
-                return album.reload();  // reload updated values from DB
-            }).then(updatedAlbum => {
-                // Ensure we always return a number, not null
-                const likes = updatedAlbum.like === null || updatedAlbum.like === undefined ? 0 : updatedAlbum.like;
-                res.json({ likes: likes });
-            });
-        })
-        .catch(err => next(err));
-})
+            await album.update({ like: newLike });
+        }
+
+        const updatedAlbum = await album.reload();
+        const likes = updatedAlbum.like === null || updatedAlbum.like === undefined ? 0 : updatedAlbum.like;
+        
+        res.json({ likes: likes });
+
+    } catch (err) {
+        next(err);
+    }
+});
 
 router.patch('/shares/:albumId',checkAuth,(req,res,next)=>{
     Album.update(
